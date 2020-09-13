@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flexible Survival Progress Editor</title>
+<script>
+let FSSaveFile = {
+  istring2jsstring : (istring) => {
+    istring = istring.substring(1, istring.length-1); // remove S and ;
+    let ordvals = istring.split(',').map(v => parseInt(v));
+    ordvals.pop(); // pop null byte
+    let jsstring = String.fromCodePoint(...ordvals);
+    return jsstring;
+  },
+  jsstring2istring : (jstring) => {
+    jstring += '\0';
+    [...chars] = jstring;
+    return 'S'+chars.map((_,i) => jstring.charCodeAt(i))+';';
+  },
+  from_string : (data) => {
+    let lines = data.split('\n');
+    let header_asterisk = lines.shift();
+    let header_exclamation = lines.shift();
+    let table_identifier = header_exclamation.match(/! Table of ([^ ]+)/)[1];
+    let rows = lines.map((row) => {
+      let tokens = row.split(' ').filter(t => t !== '');
+      tokens = tokens.map(t => {
+        if (t.startsWith('S') && t.endsWith(';')) {
+          return FSSaveFile.istring2jsstring(t);
+        } else {
+          return parseInt(t);
+        }
+      });
+      return tokens;
+    });
+    let named_rows = [];
+    let entry_names = FSSaveFile.maps[table_identifier];
+    if (entry_names) {
+      named_rows = rows.map(r => r.map((entry_value, entry_index) => [entry_names[entry_index], entry_value]));
+    } else {
+      named_rows = rows.map(r => r.map((entry_value, entry_index) => ['unknown entry', entry_value]));
+    }
+    let savefile = {
+      header_asterisk : header_asterisk,
+      header_exclamation : header_exclamation,
+      table_identifier : table_identifier,
+      named_rows : named_rows,
+      to_string : () => {
+        let rows_string = savefile.named_rows.map(row => row.map(item => {
+          let value = item[1];
+          if (typeof value === 'string') {
+            return FSSaveFile.jsstring2istring(value);
+          } else {
+            return value;
+          }
+        }).join(' ')).join(' \n');
+        return `${savefile.header_asterisk}
+${savefile.header_exclamation}
+${rows_string} `;
+      }
+    };
+    return savefile;
+  },
+  maps : {
+    GameCharacterVariables : ['Name', 'LocationName', 'Energy', 'HP', 'MaxHP', 'XP', 'Level', 'Strength', 'Dexterity', 'Stamina', 'Charisma', 'Intelligence', 'Perception', 'Hunger', 'Thirst', 'Morale', 'Lust', 'Libido', 'Loyalty', 'Humanity', 'Body Weight', 'Body Definition', 'Androginity', 'Mouth Length', 'Mouth Circumference', 'Tongue Length', 'Breast Size', 'Nipple Count', 'Asshole Depth', 'Asshole Tightness', 'Cock Count', 'Cock Girth', 'Cock Length', 'Ball Count', 'Ball Size', 'Cunt Count', 'Cunt Depth', 'Cunt Tightness', 'Clit Size', 'Armor', 'Capacity', 'SleepRhythm', 'scalevalue', 'PlayerLastSize', 'MainInfection', 'FirstAnalPartner', 'FirstVaginalPartner', 'FirstOralPartner', 'FirstPenilePartner', 'Cock Size Desc', 'Cunt Size Desc', 'Breast Size Desc', 'Short Breast Size Desc', 'Originalgender', 'PlayerOriginalgender', 'PlayerLastGender', 'PlayerLastBodytype', 'PlayerMet', 'PlayerRomanced', 'PlayerFriended', 'PlayerControlled', 'PlayerFucked', 'OralVirgin', 'Virgin', 'AnalVirgin', 'PenileVirgin', 'SexuallyExperienced', 'TwistedCapacity', 'Sterile']
+  }
+};
+
+function init() {
+  let dom_rowselect = document.getElementById('rowselect');
+  let dom_saveitems = document.getElementById('saveitems');
+  let dom_savedata = document.getElementById('savedata');
+  let load_savefile = () => {
+    dom_rowselect.innerHTML = '';
+    dom_saveitems.innerHTML = '';
+    savefile = FSSaveFile.from_string(dom_savedata.value);
+    savefile.named_rows.forEach((row, row_index) => {
+      let dom_option = document.createElement('option');
+      dom_option.innerHTML = row.map(item => `${item[1]} (${item[0]})`).join(', ');
+      dom_option.setAttribute('value', row_index);
+      dom_rowselect.appendChild(dom_option);
+    });
+    dom_rowselect.addEventListener('change', (e) => {
+    row_index = parseInt(dom_rowselect.value);
+    dom_saveitems.innerHTML = '';
+    savefile.named_rows[row_index].forEach((keyval, keyval_index) => {
+      let [key, value] = keyval;
+      let dom_li = document.createElement('li');
+      dom_li.innerHTML = `${key}: `;
+      let dom_input = document.createElement('input');
+      if (typeof value === 'number') {
+        dom_input.setAttribute('type', 'number');
+      }
+      dom_input.setAttribute('value', value);
+      dom_input.addEventListener('input', (e) => {
+        let value = dom_input.value;
+        if (dom_input.type === 'number') {
+          value = parseInt(value);
+        }
+        savefile.named_rows[row_index][keyval_index][1] = value;
+        dom_savedata.value = savefile.to_string();
+      });
+      dom_li.appendChild(dom_input);
+      dom_saveitems.appendChild(dom_li);
+    });
+  });
+  }
+  dom_savedata.addEventListener('change', (e) => load_savefile());
+  document.getElementById('button_load').addEventListener('click', (e) => load_savefile());
+}
+</script>
+<style>
+select, ol, p, textarea, input[type="button"] {
+    display: block;
+    width: 100%;
+    margin: 1em 0;
+  }
+</style>
+  </head>
+  <body onload="init()">
+    <select id="rowselect"></select>
+    <ol id="saveitems"></ol>
+    <p>Paste contents of FSCharacterVariableSave here, select entry and edit using controls above. Changes are applied directly, copy the results back to the file.</p>
+    <textarea id="savedata"></textarea>
+    <input id="button_load" type="button" value="load">
+  </body>
+</html>
